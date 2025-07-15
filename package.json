@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "uploadSecrets": "bash -c 'source .env && node ./functions/uploadSecrets.js'",
+    "simulate": "bash -c 'source .env && node ./functions/simulators/getPortfolilioBalanceSimulator.js'",
+    "simulateGetTslaBalance": "bash -c 'source .env && node ./functions/simulators/getTslaBalanceSimulator.js'",
+    "simulateBuyTsla": "bash -c 'source .env && node ./functions/simulators/buyTslaSimulator.js'"
+  },
+  "dependencies": {
+    "@chainlink/functions-toolkit": "^0.3.2"
+  }
+}
