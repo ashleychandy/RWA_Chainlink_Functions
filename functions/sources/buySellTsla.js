@@ -47,5 +47,10 @@ const scaledQty = BigInt(filledQty) * 10n ** 18n;
 // Encode as uint256
 const encoded = Functions.encodeUint256(scaledQty);
 
+
+
+
+
+
 // Return encoded Uint8Array
 return encoded;
