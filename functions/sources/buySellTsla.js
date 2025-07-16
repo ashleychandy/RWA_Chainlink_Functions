@@ -15,21 +15,27 @@ async function main() {
 
   if (responseStatus !== 200) {
     console.log(`Order placement failed with status: ${responseStatus}`);
-    return Functions.encodeUint256(3);
+    return Functions.encodeUint256(0);
   }
 
-  let [filled, orderStatus] = await waitForOrderToFill(client_order_id);
+  let filled = await waitForOrderToFill(client_order_id);
+
   if (!filled) {
     console.log("Order was not filled within timeout period");
     // await cancelOrder(client_order_id);
-    return Functions.encodeUint256(2);
+    return Functions.encodeUint256(0);
   }
+
   const scaledQty = BigInt(quantityOfTsla) * 10n ** 18n;
+
+  console.log("The number returneing shld be ", scaledQty);
 
   // Encode as uint256
   const encoded = Functions.encodeUint256(scaledQty);
 
   return encoded;
+
+  // return Functions.encodeUint256(quantityOfTsla);
 }
 
 async function placeOrder(qty, side) {
@@ -106,10 +112,12 @@ async function waitForOrderToFill(client_order_id) {
     const orderStatus = response.data.status;
     console.log(`Order status: ${orderStatus}`);
 
-    if (orderStatus === "filled") {
+    if (orderStatus === "filled" || orderStatus === "accepted") {
       filled = true;
       break;
     }
+
+    console.log("numberOfSleeps: ", numberOfSleeps);
 
     numberOfSleeps++;
     await sleep(SLEEP_TIME);

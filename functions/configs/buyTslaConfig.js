@@ -13,7 +13,7 @@ const requestConfig = {
     alpacaSecret: process.env.ALPACA_SECRET_KEY,
   },
   secretsLocation: Location.DONHosted,
-  args: ["1","buy"],
+  args: ["8","buy"],
   CodeLanguage: CodeLanguage.JavaScript,
   expectedReturnType: ReturnType.int256,
 };
