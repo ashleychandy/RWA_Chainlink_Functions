@@ -70,6 +70,8 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     bytes32 private currentRequestId;
     uint256 s_totalMintedTokens;
 
+    bool issue = false;
+
     address Owner = owner();
 
     mapping(bytes32 requestId => MintOrRedeem mintOrRedeem) private s_requestIdToMintOrRedeem;
@@ -117,6 +119,11 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
 
     function _buyFulfillRequest(bytes memory response) internal {
         uint256 tslaToMint = uint256(bytes32(response));
+
+        if (tslaToMint == 0) {
+            issue = true;
+        }
+
         address user = s_requestIdToUser[currentRequestId];
         s_userToFunds[user].amountOfDTsla += tslaToMint;
     }
@@ -144,11 +151,9 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         _burn(msg.sender, amountdTsla);
     }
 
-    function _redeemFulfillRequest(bytes32 requestId, bytes memory response) internal {
-        uint256 usdcAmount = uint256(bytes32(response));
-
-       
-    }
+    // function _redeemFulfillRequest(bytes32 requestId, bytes memory response) internal {
+    //     uint256 usdcAmount = uint256(bytes32(response));
+    // }
 
     //ROUTING
 
@@ -156,7 +161,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         if (s_requestIdToMintOrRedeem[requestId] == MintOrRedeem.mint) {
             _buyFulfillRequest(response);
         } else {
-            _redeemFulfillRequest(requestId, response);
+            // _redeemFulfillRequest(requestId, response);
         }
     }
 
@@ -274,7 +279,6 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
 
     // View functions
 
-    
     function getPortfolioBalance() public view returns (uint256) {
         return s_portfolioBalance;
     }
