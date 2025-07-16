@@ -230,6 +230,10 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
 
     //VIEW FUNCTIONS
 
+    function getIssue() public view returns (bool) {
+        return issue;
+    }
+
     function getDtslaBalance(address user) public view returns (uint256) {
         return s_userToFunds[user].amountOfDTsla;
     }

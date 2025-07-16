@@ -8,6 +8,12 @@ const {
 async function main() {
   const { responseBytesHexstring, errorString, capturedTerminalOutput } =
     await simulateScript(requestConfig);
+
+  // Print everything captured from inside the function source
+  if (capturedTerminalOutput) {
+    console.log("Captured terminal output from function source:");
+    console.log(capturedTerminalOutput);
+  }
   if (responseBytesHexstring) {
     console.log(
       `Response returned by script during local simulation: ${decodeResult(
