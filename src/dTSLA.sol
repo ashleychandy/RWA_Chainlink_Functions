@@ -38,6 +38,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         uint8 side;
         uint256 amountOfUsdc;
         uint256 amountOfDTsla;
+        uint256 orderId;
     }
 
     /*SIDE
@@ -105,9 +106,11 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         req.initializeRequestForInlineJavaScript(s_buySourceCode);
         req.addDONHostedSecrets(donHostedSecretsSlotID, donHostedSecretsVersion);
 
-        string[] memory args = new string[](2);
+        string[] memory args = new string[](4);
         args[0] = amountOfTslaToBuy.toString(); //to broker sell x amt of tsla
         args[1] = "buy";
+        args[2] = (msg.sender).toString();
+        args[3] = (stats.orderId).toString();
         req.setArgs(args);
 
         bytes32 requestId = _sendRequest(req.encodeCBOR(), i_subId, GAS_LIMIT, DON_ID); // CBOR encoding language which the Chainlink nodes understand
@@ -118,7 +121,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
 
         stats.side = 1;
         stats.amountOfUsdc -= amountOfUsdcForDTsla;
-
+        stats.orderId++;
         return requestId;
     }
 
@@ -150,9 +153,11 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         req.initializeRequestForInlineJavaScript(s_sellSourceCode);
 
         //send paramaeter of amountdTsla to the script
-        string[] memory args = new string[](2);
+        string[] memory args = new string[](4);
         args[0] = amountOfDTsla.toString(); //to broker sell x amt of tsla
         args[1] = "sell"; //to send usdc to the contract
+        args[2] = (msg.sender).toString();
+        args[3] = (stats.orderId).toString();
         req.setArgs(args);
 
         bytes32 requestId = _sendRequest(req.encodeCBOR(), i_subId, GAS_LIMIT, DON_ID);
@@ -161,6 +166,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         userreq.user = msg.sender;
         userreq.amountOfDTslaReq = amountOfDTsla;
 
+        stats.orderId++;
         stats.side = 2;
         stats.amountOfDTsla -= amountOfDTsla;
     }
@@ -324,8 +330,8 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         return s_buySourceCode;
     }
 
-    function getRedeemSourceCode() public view returns (string memory) {
-        return s_redeemSourceCode;
+    function getSellSourceCode() public view returns (string memory) {
+        return s_sellSourceCode;
     }
 
     function getCollateralRatio() public pure returns (uint256) {

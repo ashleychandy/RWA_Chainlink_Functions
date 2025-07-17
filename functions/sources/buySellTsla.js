@@ -5,20 +5,27 @@ async function main() {
   console.log("buyTslaSimulator.js started");
   const quantityOfTsla = args[0];
   const orderType = args[1]; //buy/sell
+  const userAddr = args[2];
+  const orderId = args[3];
+
+  const client_order_id = `${userAddr}${orderId}`;
   // const quantityOfTsla = "7";
   // const orderType = "buy"; //buy/sell
   _checkKeys();
 
-  let client_order_id, responseStatus;
+  let orderStatus = checkOrderExists(client_order_id);
 
-  if (!orderPlaced) {
-    [client_order_id, responseStatus] = await placeOrder(
+  let responseStatus;
+
+  if (orderStatus !== 200) {
+    responseStatus = await placeOrder(
       quantityOfTsla,
-      orderType
+      orderType,
+      client_order_id
     );
   }
 
-  if (responseStatus !== 200) {
+  if (orderStatus === 402 || orderStatus === 403) {
     console.log(`Order placement failed with status: ${responseStatus}`);
     return Functions.encodeUint256(0);
   }
@@ -43,7 +50,23 @@ async function main() {
   // return Functions.encodeUint256(quantityOfTsla);
 }
 
-async function placeOrder(qty, side) {
+async function checkOrderExists(client_order_id) {
+  const alpacaRequest = Functions.makeHttpRequest({
+    url: `https://paper-api.alpaca.markets/v2/orders:${client_order_id}`,
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "APCA-API-KEY-ID": secrets.alpacaKey,
+      "APCA-API-SECRET-KEY": secrets.alpacaSecret,
+    },
+  });
+  const response = await alpacaRequest;
+
+  return response.status;
+}
+
+async function placeOrder(qty, side, client_order_id) {
   const alpacaRequest = Functions.makeHttpRequest({
     url: "https://paper-api.alpaca.markets/v2/orders",
     method: "POST",
@@ -59,10 +82,10 @@ async function placeOrder(qty, side) {
       side: side,
       symbol: "TSLA",
       qty: qty,
+      client_order_id: client_order_id,
     },
   });
 
-  orderPlaced = true;
   await sleep(SLEEP_TIME);
 
   const response = await alpacaRequest;
@@ -72,12 +95,10 @@ async function placeOrder(qty, side) {
   console.log(response);
   console.log(`\n\n`);
 
-  const { client_order_id, status: orderStatus } = response.data;
   console.log(`\n Response Status in place order ${responseStatus}\n\n`);
   console.log("client_order_id:", client_order_id);
-  console.log("orderStatus: ", orderStatus);
 
-  return [client_order_id, responseStatus];
+  return responseStatus;
 }
 
 async function waitForOrderToFill(client_order_id) {
