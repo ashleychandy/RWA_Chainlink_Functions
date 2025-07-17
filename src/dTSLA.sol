@@ -69,7 +69,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
 
     //s_ ~ storage
     string private s_buySourceCode;
-    string private s_redeemSourceCode;
+    string private s_sellSourceCode;
     uint256 private s_portfolioBalance;
     bytes32 private currentRequestId;
     uint256 s_totalMintedTokens;
@@ -83,13 +83,11 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     mapping(address user => userStats userstats) private s_userToUserStats;
     mapping(bytes32 requestId => userReq userreq) private s_requestIdToUserReq;
 
-    constructor(string memory redeemSourceCode, uint64 subId, address usdcAddr)
+    constructor(uint64 subId, address usdcAddr)
         ConfirmedOwner(msg.sender)
         FunctionsClient(Arbitrum_Functions_Router)
         ERC20("dTSLA", "dTSLA")
     {
-        //
-        s_redeemSourceCode = redeemSourceCode;
         i_subId = subId;
         TEST_USDC = usdcAddr;
     }
@@ -97,7 +95,9 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     function sendBuyRequest(uint256 amountOfTslaToBuy) external returns (bytes32) {
         uint256 amountOfUsdcForDTsla = getUsdcValueOfTsla(amountOfTslaToBuy);
 
-        if ((s_userToUserStats[msg.sender].amountOfUsdc) < amountOfUsdcForDTsla) {
+        userStats storage stats = s_userToUserStats[msg.sender];
+
+        if ((stats.amountOfUsdc) < amountOfUsdcForDTsla) {
             revert dTSLA__NotEnoughUsdc();
         }
 
@@ -115,9 +115,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         userReq storage userreq = s_requestIdToUserReq[requestId];
         userreq.user = msg.sender;
         userreq.amountOfUsdcReq = amountOfUsdcForDTsla;
-        userreq.amountOfDTslaReq = amountOfTslaToBuy;
 
-        userStats storage stats = s_userToUserStats[msg.sender];
         stats.side = 1;
         stats.amountOfUsdc -= amountOfUsdcForDTsla;
 
@@ -127,14 +125,12 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     function _buyFulfillRequest(bytes32 requestId, bytes memory response) internal {
         uint256 tslaToMint = uint256(bytes32(response));
         userReq storage userreq = s_requestIdToUserReq[requestId];
-        address user = userreq.user;
-        uint256 usdcAmtReq = userreq.amountOfUsdcReq;
 
         if (tslaToMint == 0) {
             //Add USDC back to the user
-            s_userToUserStats[user].amountOfUsdc += usdcAmtReq;
+            s_userToUserStats[userreq.user].amountOfUsdc += userreq.amountOfUsdcReq;
         } else {
-            s_userToUserStats[user].amountOfDTsla += tslaToMint;
+            s_userToUserStats[userreq.user].amountOfDTsla += tslaToMint;
         }
 
         delete s_requestIdToUserReq[requestId];
@@ -143,28 +139,46 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     /// For users to (sell)dTSLA for usdc
     /// sell TSLA on broker acc and buy usdc
 
-    function sendSellRequest(uint256 amountdTsla) external {
-        uint256 amountTslaInUsdc = getUsdcValueOfTsla(amountdTsla);
+    function sendSellRequest(uint256 amountOfDTsla) external {
+        userStats storage stats = s_userToUserStats[msg.sender];
 
-        if (amountTslaInUsdc < MINIMUM_WITHDRAWL_AMOUNT) {
+        if (amountOfDTsla < stats.amountOfDTsla) {
             revert dTSLA__DoesntMeetMinimumWithdrwalAmount();
         }
+
         FunctionsRequest.Request memory req;
-        req.initializeRequestForInlineJavaScript(s_redeemSourceCode);
+        req.initializeRequestForInlineJavaScript(s_sellSourceCode);
 
         //send paramaeter of amountdTsla to the script
         string[] memory args = new string[](2);
-        args[0] = amountdTsla.toString(); //to broker sell x amt of tsla
-        args[1] = amountTslaInUsdc.toString(); //to send usdc to the contract
+        args[0] = amountOfDTsla.toString(); //to broker sell x amt of tsla
+        args[1] = "sell"; //to send usdc to the contract
         req.setArgs(args);
 
         bytes32 requestId = _sendRequest(req.encodeCBOR(), i_subId, GAS_LIMIT, DON_ID);
 
-        _burn(msg.sender, amountdTsla);
+        userReq storage userreq = s_requestIdToUserReq[requestId];
+        userreq.user = msg.sender;
+        userreq.amountOfDTslaReq = amountOfDTsla;
+
+        stats.side = 2;
+        stats.amountOfDTsla -= amountOfDTsla;
     }
 
     function _sellFulfillRequest(bytes32 requestId, bytes memory response) internal {
-        uint256 usdcAmount = uint256(bytes32(response));
+        uint256 dTslaAmountSold = uint256(bytes32(response));
+
+        uint256 amountTslaInUsdc = getUsdcValueOfTsla(dTslaAmountSold);
+
+        userReq storage userreq = s_requestIdToUserReq[requestId];
+
+        if (dTslaAmountSold == 0) {
+            s_userToUserStats[userreq.user].amountOfDTsla += userreq.amountOfDTslaReq;
+        } else {
+            s_userToUserStats[userreq.user].amountOfUsdc += amountTslaInUsdc;
+        }
+
+        delete s_requestIdToUserReq[requestId];
     }
 
     //ROUTING
@@ -188,6 +202,8 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         bool succ = transferFrom(msg.sender, address(this), amount);
         if (!succ) revert fund__TransferFailed();
         s_userToUserStats[msg.sender].amountOfDTsla += amount;
+
+        _burn(msg.sender, amount);
     }
 
     function sendUsdcToContract(uint256 amountOfUsdc) external {
@@ -229,6 +245,9 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     }
 
     //SETTER FUNCTIONS
+    function setSellSource(string memory sellSourceCode) external onlyOwner {
+        s_sellSourceCode = sellSourceCode;
+    }
 
     function setBuySource(string memory buySourceCode) external onlyOwner {
         s_buySourceCode = buySourceCode;
@@ -243,8 +262,6 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     }
 
     //VIEW FUNCTIONS
-
-   
 
     function getDtslaBalance(address user) public view returns (uint256) {
         return s_userToUserStats[user].amountOfDTsla;

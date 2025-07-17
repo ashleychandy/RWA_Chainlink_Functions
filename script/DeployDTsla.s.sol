@@ -12,12 +12,13 @@ contract DeployDTsla is Script {
     address usdcAddr = vm.envAddress("USDC_ADDRESS");
 
     function run() public {
-        string memory mintSource = vm.readFile(alpacaMintSource);
+        string memory buySellSource = vm.readFile(alpacaMintSource);
 
         vm.startBroadcast();
 
-        dTSLA dTsla = new dTSLA(alpacaRedeemSource, subId, usdcAddr);
-        dTsla.setBuySource(mintSource);
+        dTSLA dTsla = new dTSLA( subId, usdcAddr);
+        dTsla.setBuySource(buySellSource);
+        dTsla.setSellSource(buySellSource);
         vm.stopBroadcast();
         console2.log(address(dTsla));
     }

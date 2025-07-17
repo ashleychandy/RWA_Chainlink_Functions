@@ -17,7 +17,7 @@ async function main() {
       orderType
     );
   }
-  
+
   if (responseStatus !== 200) {
     console.log(`Order placement failed with status: ${responseStatus}`);
     return Functions.encodeUint256(0);

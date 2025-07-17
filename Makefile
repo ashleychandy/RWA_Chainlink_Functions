@@ -10,3 +10,5 @@ deploy_USDC :; forge script script/DeployTUSDC.s.sol \
   --broadcast \
   --verify \
   -vvvv
+
+setBuySource:; forge script script/setBuySource.s.sol --private-key ${PRIVATE_KEY} --rpc-url ${RPC_URL} --broadcast
