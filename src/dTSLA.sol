@@ -27,21 +27,25 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     error fund__NotApproved();
     error fund__TransferFailed();
 
-    enum MintOrRedeem {
-        mint,
-        redeem
+    struct userReq {
+        address user;
+        uint256 amountOfUsdcReq;
+        uint256 amountOfDTslaReq;
     }
 
-    struct dTslaRequest {
-        uint256 amountofTokens;
-        address requester;
-        MintOrRedeem mintOrRedeem;
-    }
-
-    struct Funds {
+    struct userStats {
+        // bytes32 requestId;
+        uint8 side;
         uint256 amountOfUsdc;
         uint256 amountOfDTsla;
     }
+
+    /*SIDE
+    0: NULL
+    1: BUY
+    2: SELL
+    3: TRANSFER
+    */
 
     //Math Constants
     uint256 constant PRECISION = 1e18;
@@ -61,7 +65,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     uint32 constant GAS_LIMIT = 300_000;
     bytes32 constant DON_ID = hex"66756e2d617262697472756d2d7365706f6c69612d3100000000000000000000";
     uint8 donHostedSecretsSlotID = 0;
-    uint64 donHostedSecretsVersion = 1752534582;
+    uint64 donHostedSecretsVersion = 1752710311;
 
     //s_ ~ storage
     string private s_buySourceCode;
@@ -74,10 +78,10 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
 
     address Owner = owner();
 
-    mapping(bytes32 requestId => MintOrRedeem mintOrRedeem) private s_requestIdToMintOrRedeem;
+    //MAPPING
 
-    mapping(address user => Funds funds) private s_userToFunds;
-    mapping(bytes32 requestId => address user) private s_requestIdToUser;
+    mapping(address user => userStats userstats) private s_userToUserStats;
+    mapping(bytes32 requestId => userReq userreq) private s_requestIdToUserReq;
 
     constructor(string memory redeemSourceCode, uint64 subId, address usdcAddr)
         ConfirmedOwner(msg.sender)
@@ -90,13 +94,10 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         TEST_USDC = usdcAddr;
     }
 
-    ///check broker acc if TSLA stock is present
-    ///if present then mint equivalent amt of stocks as dTSLA
-
     function sendBuyRequest(uint256 amountOfTslaToBuy) external returns (bytes32) {
         uint256 amountOfUsdcForDTsla = getUsdcValueOfTsla(amountOfTslaToBuy);
 
-        if ((s_userToFunds[msg.sender].amountOfUsdc) < amountOfUsdcForDTsla) {
+        if ((s_userToUserStats[msg.sender].amountOfUsdc) < amountOfUsdcForDTsla) {
             revert dTSLA__NotEnoughUsdc();
         }
 
@@ -110,28 +111,39 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         req.setArgs(args);
 
         bytes32 requestId = _sendRequest(req.encodeCBOR(), i_subId, GAS_LIMIT, DON_ID); // CBOR encoding language which the Chainlink nodes understand
-        currentRequestId = requestId;
-        s_requestIdToMintOrRedeem[currentRequestId] = MintOrRedeem.mint;
-        s_requestIdToUser[currentRequestId] = msg.sender;
-        s_userToFunds[msg.sender].amountOfUsdc -= amountOfUsdcForDTsla;
-        return currentRequestId;
+
+        userReq storage userreq = s_requestIdToUserReq[requestId];
+        userreq.user = msg.sender;
+        userreq.amountOfUsdcReq = amountOfUsdcForDTsla;
+        userreq.amountOfDTslaReq = amountOfTslaToBuy;
+
+        userStats storage stats = s_userToUserStats[msg.sender];
+        stats.side = 1;
+        stats.amountOfUsdc -= amountOfUsdcForDTsla;
+
+        return requestId;
     }
 
-    function _buyFulfillRequest(bytes memory response) internal {
+    function _buyFulfillRequest(bytes32 requestId, bytes memory response) internal {
         uint256 tslaToMint = uint256(bytes32(response));
+        userReq storage userreq = s_requestIdToUserReq[requestId];
+        address user = userreq.user;
+        uint256 usdcAmtReq = userreq.amountOfUsdcReq;
 
         if (tslaToMint == 0) {
-            issue = true;
+            //Add USDC back to the user
+            s_userToUserStats[user].amountOfUsdc += usdcAmtReq;
+        } else {
+            s_userToUserStats[user].amountOfDTsla += tslaToMint;
         }
 
-        address user = s_requestIdToUser[currentRequestId];
-        s_userToFunds[user].amountOfDTsla += tslaToMint;
+        delete s_requestIdToUserReq[requestId];
     }
 
     /// For users to (sell)dTSLA for usdc
     /// sell TSLA on broker acc and buy usdc
 
-    function sendRedeemRequest(uint256 amountdTsla) external {
+    function sendSellRequest(uint256 amountdTsla) external {
         uint256 amountTslaInUsdc = getUsdcValueOfTsla(amountdTsla);
 
         if (amountTslaInUsdc < MINIMUM_WITHDRAWL_AMOUNT) {
@@ -151,17 +163,19 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         _burn(msg.sender, amountdTsla);
     }
 
-    // function _redeemFulfillRequest(bytes32 requestId, bytes memory response) internal {
-    //     uint256 usdcAmount = uint256(bytes32(response));
-    // }
+    function _sellFulfillRequest(bytes32 requestId, bytes memory response) internal {
+        uint256 usdcAmount = uint256(bytes32(response));
+    }
 
     //ROUTING
 
     function fulfillRequest(bytes32 requestId, bytes memory response, bytes memory /*err*/ ) internal override {
-        if (s_requestIdToMintOrRedeem[requestId] == MintOrRedeem.mint) {
-            _buyFulfillRequest(response);
-        } else {
-            // _redeemFulfillRequest(requestId, response);
+        address user = s_requestIdToUserReq[requestId].user;
+        if (s_userToUserStats[user].side == 1) {
+            _buyFulfillRequest(requestId, response);
+        }
+        if (s_userToUserStats[user].side == 2) {
+            _sellFulfillRequest(requestId, response);
         }
     }
 
@@ -173,7 +187,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         }
         bool succ = transferFrom(msg.sender, address(this), amount);
         if (!succ) revert fund__TransferFailed();
-        s_userToFunds[msg.sender].amountOfDTsla += amount;
+        s_userToUserStats[msg.sender].amountOfDTsla += amount;
     }
 
     function sendUsdcToContract(uint256 amountOfUsdc) external {
@@ -191,19 +205,19 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
             revert fund__TransferFailed();
         }
 
-        s_userToFunds[msg.sender].amountOfUsdc += amountOfUsdc;
+        s_userToUserStats[msg.sender].amountOfUsdc += amountOfUsdc;
     }
 
     function withdrawDTsla(uint256 amountToWithdraw) external {
-        if ((s_userToFunds[msg.sender].amountOfDTsla) < amountToWithdraw) {
+        if ((s_userToUserStats[msg.sender].amountOfDTsla) < amountToWithdraw) {
             revert fund__NotEnoughDTsla();
         }
-        s_userToFunds[msg.sender].amountOfDTsla -= amountToWithdraw;
+        s_userToUserStats[msg.sender].amountOfDTsla -= amountToWithdraw;
         _mint(msg.sender, amountToWithdraw);
     }
 
     function withdrawUsdc(uint256 amountToWithdraw) external {
-        if ((s_userToFunds[msg.sender].amountOfUsdc) < amountToWithdraw) {
+        if ((s_userToUserStats[msg.sender].amountOfUsdc) < amountToWithdraw) {
             revert fund__NotEnoughUsdc();
         }
 
@@ -211,7 +225,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         if (!succ) {
             revert dTSLA__TransferFailed();
         }
-        s_userToFunds[msg.sender].amountOfUsdc -= amountToWithdraw;
+        s_userToUserStats[msg.sender].amountOfUsdc -= amountToWithdraw;
     }
 
     //SETTER FUNCTIONS
@@ -230,16 +244,14 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
 
     //VIEW FUNCTIONS
 
-    function getIssue() public view returns (bool) {
-        return issue;
-    }
+   
 
     function getDtslaBalance(address user) public view returns (uint256) {
-        return s_userToFunds[user].amountOfDTsla;
+        return s_userToUserStats[user].amountOfDTsla;
     }
 
     function getUsdcBalance(address user) public view returns (uint256) {
-        return s_userToFunds[user].amountOfUsdc;
+        return s_userToUserStats[user].amountOfUsdc;
     }
 
     function getUsdcAddress() public view returns (address) {
