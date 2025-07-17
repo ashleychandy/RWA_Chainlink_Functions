@@ -1,4 +1,5 @@
 const SLEEP_TIME = 7000; // 10 seconds
+let orderPlaced;
 
 async function main() {
   console.log("buyTslaSimulator.js started");
@@ -8,11 +9,15 @@ async function main() {
   // const orderType = "buy"; //buy/sell
   _checkKeys();
 
-  let [client_order_id, responseStatus] = await placeOrder(
-    quantityOfTsla,
-    orderType
-  );
+  let client_order_id, responseStatus;
 
+  if (!orderPlaced) {
+    [client_order_id, responseStatus] = await placeOrder(
+      quantityOfTsla,
+      orderType
+    );
+  }
+  
   if (responseStatus !== 200) {
     console.log(`Order placement failed with status: ${responseStatus}`);
     return Functions.encodeUint256(0);
@@ -57,6 +62,7 @@ async function placeOrder(qty, side) {
     },
   });
 
+  orderPlaced = true;
   await sleep(SLEEP_TIME);
 
   const response = await alpacaRequest;
