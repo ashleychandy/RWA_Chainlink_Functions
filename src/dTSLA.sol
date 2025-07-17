@@ -11,6 +11,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     using FunctionsRequest for FunctionsRequest.Request;
@@ -109,7 +110,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         string[] memory args = new string[](4);
         args[0] = amountOfTslaToBuy.toString(); //to broker sell x amt of tsla
         args[1] = "buy";
-        args[2] = (msg.sender).toString();
+        args[2] = Strings.toHexString(msg.sender);
         args[3] = (stats.orderId).toString();
         req.setArgs(args);
 
@@ -145,7 +146,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
     function sendSellRequest(uint256 amountOfDTsla) external {
         userStats storage stats = s_userToUserStats[msg.sender];
 
-        if (amountOfDTsla < stats.amountOfDTsla) {
+        if (stats.amountOfDTsla < amountOfDTsla) {
             revert dTSLA__DoesntMeetMinimumWithdrwalAmount();
         }
 
@@ -156,7 +157,8 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         string[] memory args = new string[](4);
         args[0] = amountOfDTsla.toString(); //to broker sell x amt of tsla
         args[1] = "sell"; //to send usdc to the contract
-        args[2] = (msg.sender).toString();
+        args[2] = Strings.toHexString(msg.sender);
+
         args[3] = (stats.orderId).toString();
         req.setArgs(args);
 
