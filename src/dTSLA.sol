@@ -99,13 +99,36 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         TEST_USDC = usdcAddr;
     }
 
-    function instantBuySell(uint256 amountOfTslaToBuy, bool side) external {
-        uint256 amountOfUsdcForDTsla = getUsdcValueOfTsla(amountOfTslaToBuy);
+    function instantBuySell(uint256 amountOfTsla, bool side) external {
+        uint256 amountOfUsdcForDTsla = getUsdcValueOfTsla(amountOfTsla);
 
         userStats storage u_stats = s_userToUserStats[msg.sender];
+        userStats storage c_stats = s_userToUserStats[address(this)];
 
-        if ((u_stats.amountOfUsdc) < amountOfUsdcForDTsla) {
-            revert dTSLA__NotEnoughUsdc();
+        if (side == true) {
+            if ((u_stats.amountOfUsdc) < amountOfUsdcForDTsla) {
+                revert dTSLA__NotEnoughUsdc();
+            }
+
+            if ((c_stats.amountOfDTsla) < amountOfTsla) {
+                revert dTSLA__NotEnoughUsdc();
+            }
+
+            u_stats.amountOfUsdc -= amountOfUsdcForDTsla;
+            c_stats.amountOfDTsla -= amountOfTsla;
+            u_stats.amountOfDTsla += amountOfTsla;
+        }
+        if (side == false) {
+            if ((u_stats.amountOfDTsla) < amountOfTsla) {
+                revert dTSLA__NotEnoughUsdc();
+            }
+
+            if ((c_stats.amountOfUsdc) < amountOfUsdcForDTsla) {
+                revert dTSLA__NotEnoughUsdc();
+            }
+            u_stats.amountOfDTsla -= amountOfTsla;
+            c_stats.amountOfUsdc -= amountOfUsdcForDTsla;
+            u_stats.amountOfUsdc += amountOfUsdcForDTsla;
         }
     }
 
@@ -390,26 +413,31 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         return ((totalSupply() + addedNumberOfTokens) * getTslaPrice()) / PRECISION;
     }
 
+    // 17872710000000000000
     function getTslaPrice() public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(Arbitrum_TESLA_PRICE_FEED);
         (, int256 price,,,) = priceFeed.latestRoundData();
         return uint256(price) * ADDITIONAL_FEED_PRECISION; //TSLA DEC IS 8
     }
 
+    // returns 999795300000000000
     function getUsdcPrice() public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(Arbitrum_USDC_PRICE_FEED);
         (, int256 price,,,) = priceFeed.latestRoundData();
         return uint256(price) * ADDITIONAL_FEED_PRECISION;
     }
+    // 1 -> returns 300
 
     function getUsdValueofTsla(uint256 tslaAmount) public view returns (uint256) {
         return tslaAmount * getTslaPrice() / PRECISION;
     }
+    // 1000 -> returns 999
 
     function getUsdcValueofUsd(uint256 usdAmount) public view returns (uint256) {
         return usdAmount * getUsdcPrice() / PRECISION;
     }
 
+    // 1 -> returns 300
     function getUsdcValueOfTsla(uint256 tslaAmount) public view returns (uint256) {
         return getUsdcValueofUsd(getUsdValueofTsla(tslaAmount));
     }
