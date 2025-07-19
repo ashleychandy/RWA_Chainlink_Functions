@@ -1,5 +1,7 @@
 //SPDX-License-Identifier:MIT
 
+//Important add or devide wiht PRECISION
+
 pragma solidity ^0.8.28;
 
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsClient.sol";
@@ -180,7 +182,7 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
         string[] memory args = new string[](4);
         args[0] = amountOfTslaToBuy.toString(); //to broker sell x amt of tsla
         args[1] = "buy";
-        args[2] = Strings.toHexString(msg.sender);
+        args[2] = Strings.toHexString(address(this));
         args[3] = (u_stats.orderId).toString();
         req.setArgs(args);
 
@@ -348,7 +350,9 @@ contract dTSLA is ConfirmedOwner, FunctionsClient, ERC20 {
             revert fund__TransferFailed();
         }
 
-        s_userToUserStats[msg.sender].amountOfUsdc += amountOfUsdc;
+        uint256 preciseAmountOfUsdc = amountOfUsdc / PRECISION;
+
+        s_userToUserStats[msg.sender].amountOfUsdc += preciseAmountOfUsdc;
     }
 
     function withdrawDTslaFromFund(uint256 amountToWithdraw) external {
